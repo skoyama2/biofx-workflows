@@ -35,6 +35,11 @@ workflow BiobankScrub {
       docker_image = docker_image
   }
 
+  call IdentifyPackageCommits {
+    input:
+      docker_image = docker_image
+  }
+
   Object inputs = object {
     runid                   : runid,
     operator                : operator,
@@ -192,12 +197,72 @@ workflow BiobankScrub {
   }
 
   output {
-    File   environment = ShowEnvironment.environment
-    File   summary     = Summarize.results
+    Object package_commits = IdentifyPackageCommits.package_commits
+    File   environment     = ShowEnvironment.environment
+    File   summary         = Summarize.results
   }
 }
 
 # -----------------------------------------------------------------------------
+
+task IdentifyPackageCommits {
+  input {
+    String  docker_image
+  }
+
+  String   OUTPUTDIR = "OUTPUT"
+  String   STDOUT    = OUTPUTDIR + "/STDOUT"
+
+  command <<<
+  set -o errexit
+  set -o pipefail
+  set -o nounset
+  set -o xtrace
+  # export PS4='+(${BASH_SOURCE}:${LINENO}): ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
+
+  mkdir --parents '~{OUTPUTDIR}'
+  touch '~{STDOUT}'
+
+  python3 <<EOF
+  import sys
+  import os
+  import json
+
+  result = {}
+
+  for package in ['biofx-orchestration-utils', 'biofx-biobank-scrub']:
+
+      gitcommit_path = os.path.join(os.environ['PACKAGESDIR'],
+                                    package,
+                                    'GITCOMMIT')
+
+      try:
+          with open(gitcommit_path, 'r', encoding='utf-8') as reader:
+              value = next(reader).rstrip('\r\n')
+      except Exception as exception:
+          print(
+              f'WARNING: could not read {gitcommit_path!r}: {exception}',
+              file=sys.stderr
+          )
+          value = 'NA'
+
+      result[package] = value
+
+  with open('~{STDOUT}', 'w') as writer:
+      print(json.dump(result, writer, indent=4))
+
+  EOF
+  >>>
+
+  output {
+    Object   package_commits = read_json(STDOUT)
+  }
+
+  runtime {
+    preemptible: 0
+    docker:      docker_image
+  }
+}
 
 task ValidateInputs {
   input {
