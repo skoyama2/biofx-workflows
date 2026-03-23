@@ -1,12 +1,48 @@
 version 1.0
 
+workflow FASTOutputParser {
+    input {
+        File fast_output_file
+        String sample_type = "S"
+        String reference_build = "GRCh38"
+        String oms_query = "Y"
+        File portable_db_file = "gs://lmm-reference-data/annotation/gil_lmm/gene_info.db"
+        String report_basename = sub(basename(fast_output_file), "\\.(txt.gz|txt|TXT.GZ|TXT)$", "")
+        Boolean gatk_source = false
+        String gcp_project_id = "mgb-lmm-gcp-infrast-1651079146"
+        String workspace_name
+        String fast_parser_image = "us-central1-docker.pkg.dev/mgb-lmm-gcp-infrast-1651079146/mgbpmbiofx/fastoutputparser:20250923"
+    }
+
+    call FASTOutputParserTask {
+        input:
+            fast_output_file = fast_output_file,
+            sample_type = sample_type,
+            reference_build = reference_build,
+            oms_query = oms_query,
+            portable_db_file = portable_db_file,
+            report_basename = report_basename,
+            gatk_source = gatk_source,
+            gcp_project_id = gcp_project_id,
+            workspace_name = workspace_name,
+            fast_parser_image = fast_parser_image
+    }
+
+    output {
+        File? parsed_report = FASTOutputParserTask.parsed_report
+        File nva_report = FASTOutputParserTask.nva_report
+    }
+}
+
 task FASTOutputParserTask {
     input {
         File fast_output_file
         String sample_type
         String reference_build = "GRCh38"
         String oms_query = "Y"
-        File transcript_exonNum
+        File portable_db_file
+        String report_basename = sub(basename(fast_output_file), "\\.(txt.gz|txt|TXT.GZ|TXT)$", "")
+        Boolean gatk_source = false
         String gcp_project_id
         String workspace_name
         String fast_parser_image
@@ -35,18 +71,73 @@ task FASTOutputParserTask {
         mv "~{fast_output_file}" "~{file_name}"
 
         # Run the parser
-        $MGBPMBIOFXPATH/biofx-fast-output-parser/bin/run_parser.py -f "~{file_name}" \
-                    -s "~{sample_type}" \
-                    -o "~{oms_query}" \
-                    -e "~{transcript_exonNum}" \
-                    -b "~{reference_build}" \
-                    -k oms-client-config.json
+        if [ "~{gatk_source}" == "true" ]; then
+            $MGBPMBIOFXPATH/biofx-fast-output-parser/bin/run_parser.py -f "~{file_name}" \
+                        -s "~{sample_type}" \
+                        -o "~{oms_query}" \
+                        -e "~{portable_db_file}" \
+                        -b "~{reference_build}" \
+                        -k oms-client-config.json \
+                        -a
+        else
+           $MGBPMBIOFXPATH/biofx-fast-output-parser/bin/run_parser.py -f "~{file_name}" \
+                        -s "~{sample_type}" \
+                        -o "~{oms_query}" \
+                        -e "~{portable_db_file}" \
+                        -b "~{reference_build}" \
+                        -k oms-client-config.json 
+        fi
+
+        # Rename the output file to match the report basename
+        if [[ "~{file_basename}" != "~{report_basename}" ]]
+        then
+            if [ -f "~{file_basename}.xlsx" ]
+            then
+                mv "~{file_basename}.xlsx" "~{report_basename}.xlsx"
+            fi
+            if [ -f "~{file_basename}.xlsm" ]
+            then
+                mv "~{file_basename}.xlsm" "~{report_basename}.xlsm"
+            fi
+        fi
     >>>
 
     output {
         File? parsed_report = file_basename + ".parsed.txt"
-        File? nva_report_xlsx = file_basename + ".xlsx"
-        File? nva_report_xlsm = file_basename + ".xlsm"
+        File? nva_report_xlsx = report_basename + ".xlsx"
+        File? nva_report_xlsm = report_basename + ".xlsm"
         File nva_report = select_first([nva_report_xlsm, nva_report_xlsx])
+    }
+}
+
+task MergeFASTExportsTask {
+    input {
+        Array[File] fast_export_files
+        String sourcename
+        String output_basename
+        String docker_image
+        Int disk_size = ceil(size(fast_export_files, "GB") * 2.2) + 10
+    }
+
+    command <<<
+        set -euxo pipefail
+
+        # List all unzipped FAST export files in a file
+        for c in '~{sep="' '" fast_export_files}'; do
+            echo $c >> merge_these_files.txt
+        done
+
+        # Merge all FAST export files
+        $MGBPMBIOFXPATH/biofx-fast-output-parser/bin/merge_export_files.py \
+            --files-to-merge merge_these_files.txt --sourcename "~{sourcename}" --output-filename "~{output_basename}.txt"
+    >>>
+
+    runtime {
+        docker: "~{docker_image}"
+        disks: "local-disk " + disk_size + " SSD"
+    }
+
+    output {
+        File merged_fast_export = "~{output_basename}.txt"
     }
 }

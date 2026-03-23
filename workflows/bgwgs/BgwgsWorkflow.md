@@ -7,7 +7,7 @@ filtration, annotation, coverage, pharmacogenetic, risk and reporting capabiliti
 | :--- | :--- | :---: | :--- | :--- |
 | String | gcp_project_id | No | The GCP project to fetch secrets from | "mgb-lmm-gcp-infrast-1651079146" |
 | String | workspace_name | Yes | The name of the current workspace (for secret retrieval) | |
-| String | orchutils_docker_image | No | The name of the orchestration utils Docker image for FAST and file movement tasks | "gcr.io/mgb-lmm-gcp-infrast-1651079146/mgbpmbiofx/orchutils:20230719" |
+| String | orchutils_docker_image | No | The name of the orchestration utils Docker image for FAST and file movement tasks | "gcr.io/mgb-lmm-gcp-infrast-1651079146/mgbpmbiofx/orchutils:latest" |
 | String | bcftools_docker_image | No | The name of the bcftools Docker image for VCF annotation | "gcr.io/mgb-lmm-gcp-infrast-1651079146/mgbpmbiofx/bcftools:1.17" |
 | String | subject_id | Yes | The subject id associated with the data | |
 | String | sample_id | Yes | The sample id associated with the data | |
@@ -38,10 +38,10 @@ filtration, annotation, coverage, pharmacogenetic, risk and reporting capabiliti
 | File | cov_gene_names | No | Tab-delimited file of gene information; see DepthOfCoverage.md for details | "gs://lmm-reference-data/roi/HGNC_genenames_05272022.txt" |
 | String | cov_docker_image | No | The name of the coverage Docker image to run the coverage summary task | "gcr.io/mgb-lmm-gcp-infrast-1651079146/mgbpmbiofx/coverage:20230630" |
 | String | gatk3_docker_image | No | The name of the GATK3 Docker image for coverage analysis | "broadinstitute/gatk3:3.7-0" |
-| String | pgx_test_code | No | Test code that defines which pharmacogenomics report to generate | "lmPGX-pnlC_L" |
-| String | pgx_docker_image | No | The name of the Docker image to generate the pharmacogenomics report | "gcr.io/mgb-lmm-gcp-infrast-1651079146/mgbpmbiofx/pgx:20230711" |
-| File | pgx_workflow_fileset | No | Tar file containing the pharmacogenomics reference data to generate the report | "gs://lmm-reference-data/pgx/lmPGX-pnlC_L_files-20220118.tar" |
-| File | pgx_roi_bed | No | BED file that defines the genomic regions to include in the pharmacogenomics analysis | "gs://lmm-reference-data/pgx/lmPGX-pnlC_L_genotyping-chr-20220118.bed" |
+| String | pgx_test_code | No | Test code that defines which pharmacogenomics report to generate | "lmPGX-pnlD_L" |
+| String | pgx_docker_image | No | The name of the Docker image to generate the pharmacogenomics report | "gcr.io/mgb-lmm-gcp-infrast-1651079146/mgbpmbiofx/pgx:20241008" |
+| File | pgx_workflow_fileset | No | Tar file containing the pharmacogenomics reference data to generate the report | "gs://lmm-reference-data/pgx/lmPGX-pnlD_L_20241004.tar" |
+| File | pgx_roi_bed | No | BED file that defines the genomic regions to include in the pharmacogenomics analysis | "gs://lmm-reference-data/pgx/lmPGX-pnlD_L_genotyping.bed" |
 | String | risk_alleles_test_code | No | Test code that defines which risk alleles report to generate | "lmRISK-pnlB_L" |
 | String | risk_alleles_docker_image | No | The name of the Docker image to generate the risk alleles report | "gcr.io/mgb-lmm-gcp-infrast-1651079146/mgbpmbiofx/risk:20230724" |
 | File | risk_alleles_workflow_fileset | No | Tar file containing the risk alleles reference data to generate the report | "gs://lmm-reference-data/risk/lmRISK-pnlB_L_20230105.tar" |
@@ -55,27 +55,36 @@ filtration, annotation, coverage, pharmacogenetic, risk and reporting capabiliti
 | String | alamut_user_secret_name | No | The GCP secret name that contains the user stanza for the Alamut batch ini file | "alamut-batch-ini-user" |
 | Int | alamut_queue_limit | No | The maximum number of concurrent Alamut batch processes permitted | 4 |
 | String | alamut_queue_folder | No | The shared storage location for Alamut concurrency management | "gs://biofx-task-queue/alamut" |
+| Int | alamut_queue_wait_limit_hrs | No | The maximum number of hours to wait for a queue slot before failing | 16 |
 | String | alamut_docker_image | No | The name of the Alamut Docker image using to run Alamut Batch task | "gcr.io/mgb-lmm-gcp-infrast-1651079146/mgbpmbiofx/alamut:20230630" |
 | Boolean | alamut_save_working_files | No | Whether or not to retain intermediate Alamut Batch task files | false |
 | String | alamut_anno_src_id | No | When removing already annotated variants prior to Alamut annotation, the annotation source id to query for | "228" |
 | String | alamut_anno_min_age | No | When removing already annotated variants prior to Alamut annotation, the annotation minimum timestamp to query for (ISO8601 duration) | "P6M" |
-| String | qceval_project_type | No | The type of rules to apply for the QC evaluation task, one of "WGS", "WGS_DRAGEN", "WES" or "NONE" | "WGS" |
-| String | qceval_docker_image | No | The name of the Docker image to run the QC evaluation task | "gcr.io/mgb-lmm-gcp-infrast-1651079146/mgbpmbiofx/qceval:20230630" |
+| String | qceval_project_type | No | The type of rules to apply for the QC evaluation task, one of "BGE_DRAGEN_TP_BINNING", "WGS", "WGS_DRAGEN", "WES" or "NONE" | "BGE_DRAGEN_TP_BINNING" |
+| String | qceval_docker_image | No | The name of the Docker image to run the QC evaluation task | "gcr.io/mgb-lmm-gcp-infrast-1651079146/mgbpmbiofx/qceval:20250923" |
+| File | thresholds | No | Thresholds for flagging possible false positives | "gs://lmm-reference-data/annotation/pmeval/thresholds_20250912.tsv" |
+| File | difficult_to_map_regions | No | List of difficult to map genomic regions used for flagging possible false positives | "gs://lmm-reference-data/annotation/pmeval/difficult_to_map_regions_20250912.tgz" |
 | File | gnomad_coverage_file | No | The gnomad coverage data file | "gs://lmm-reference-data/annotation/gnomad/genomes.r3.0.1.coverage_targetROI-filtered.dedup.txt.gz" |
 | File | gnomad_coverage_file_idx | No | The gnomad coverage data index file | "gs://lmm-reference-data/annotation/gnomad/genomes.r3.0.1.coverage_targetROI-filtered.dedup.txt.gz.tbi" |
 | Array[String] | gnomad_headers | No | List of VCF headers to add when annotating VCF with gnomad coverage data.  For example, ##INFO=<ID=DP_gnomadG,Number=1,Type=Float,Description="Read depth of GnomAD Genome"> | [ "##INFO=<ID=DP_gnomadG,Number=1,Type=Float,Description=\"Read depth of GnomAD Genome\">" ] |
 | String | gnomad_column_list | No | The column list to pass to bcftools annotate for gnomad coverage annotation | "CHROM,POS,INFO/DP_gnomadG" |
 | Boolean | has_haploid_sites | No | If true, modify the VCF file headers prior to FAST load to work around lack of support Number=G fields and haploid sites | false |
-| String | sample_data_load_config_name | No | The FAST load configuration name for the sample data VCF | "Sample_VCF_PPM_Eval" |
+| String | sample_data_load_config_name | No | The FAST load configuration name for the sample data VCF, use "Sample_vcf_BGE" for qceval_project_type=BGE_DRAGEN_TP_BINNING, "Sample_VCF_PPM_Eval" otherwise | "Sample_vcf_BGE" |
 | String | gnomad_data_load_config_name | No | The FAST load configuration name for the gnomad coverage VCF | "Coverage" |
 | String | alamut_data_load_config_name | No | The FAST load configuration name for the Alamut annotated VCF | "Alamut" |
 | Array[String] | fast_annotated_sample_data_regions | No | The list of regions to include in the FAST annotated sample data; each element is a "name:applyMask" pair |  |
 | Array[String] | fast_annotated_sample_data_scripts | No | The list of custom scripts to run on the FAST annotated sample data after creation | |
 | String | fast_annotated_sample_data_saved_filter_name | No | The saved filter to apply to the FAST annotated sample data | |
-| String | igvreport_docker_image | No | The name of the Docker image to run the IGV report task | "gcr.io/mgb-lmm-gcp-infrast-1651079146/mgbpmbiofx/igvreport:20230511" |
-| String | fast_parser_image | No | The name of the Docker image to run the FAST output parser task | "gcr.io/mgb-lmm-gcp-infrast-1651079146/mgbpmbiofx/fastoutputparser:20230630" |
-| File | gil_transcript_exon_count | No | A tab delimited file of transcript id and exon count | "gs://lmm-reference-data/annotation/gil_lmm/transcript_exonNum.txt" |
+| Int | fast_data_load_wait_interval_secs | No | The number of seconds in between checks when waiting for FAST data loads to complete | 300 |
+| Int | fast_data_load_wait_max_intervals | No | The maximum number of checks to perform when waiting for FAST data loads to complete | 144 |
+| Int | fast_adi_wait_interval_secs | No | The number of seconds in between checks when waiting for FAST annotation data initialization to complete | 600 |
+| Int | fast_adi_wait_max_intervals | No | The maximum number of checks to perform when waiting for FAST annotation data initialization to complete | 144 |
+| String | igvreport_docker_image | No | The name of the Docker image to run the IGV report task | "us-central1-docker.pkg.dev/mgb-lmm-gcp-infrast-1651079146/mgbpmbiofx/igvreport:20230511" |
+| String | fast_parser_image | No | The name of the Docker image to run the FAST output parser task | "us-central1-docker.pkg.dev/mgb-lmm-gcp-infrast-1651079146/mgbpmbiofx/fastoutputparser:20250923" |
+| File | portable_db_file | No | A SQLite database that contains additional annotations that are merged into the Parser output | "gs://lmm-reference-data/annotation/gil_lmm/gene_info.db" |
 | String | fast_parser_sample_type | No | The sample type flag for the FAST output parser: S for single-sample Exome or M for multi-sample Exome or B for batch/Biobank or N for NVA-Lite | "S" |
+| Array[File] | igv_track_files | List of track files for inclusion in the IGV report | "gs://lmm-reference-data/annotation/ucsc/hg38/refGene_20231019.txt.gz" |
+| Array[File] | igv_track_index_files | List of track index files | "gs://lmm-reference-data/annotation/ucsc/hg38/refGene_20231019.txt.gz.tbi" |
 
 `cov_roi_genes` parameter default:
 ```json
@@ -269,8 +278,8 @@ filtration, annotation, coverage, pharmacogenetic, risk and reporting capabiliti
 | File | cov_gene_summary_unknown | If coverage analysis is enabled | Unknown entries from the gene coverage summary |
 | File | cov_gene_summary_entrez | If coverage analysis is enabled | Gene coverage summary enriched with Entrez IDs |
 | File | vcf | If variant calling is run | Variants called from BAM/CRAM |
-| File | pgx_CPIC_report | If PGx is enabled | CPIC pharmacogenomics report |
-| File | pgx_FDA_report | If PGx is enabled | FDA pharmacogenomics report |
+| File | pgx_summary_report | If PGx is enabled | Summary pharmacogenomics report |
+| File | pgx_details_report | If PGx is enabled | Detailed pharmacogenomics report |
 | File | pgx_genotype_xlsx | If PGx is enabled | Full list of pharmacogenomics genotypes in XLSX format |
 | File | pgx_genotype_txt | If PGx is enabled | Full list of pharmacogenomics genotypes in TSV format |
 | File | risk_alleles_report | If risk alleles is enabled | Risk alleles report |

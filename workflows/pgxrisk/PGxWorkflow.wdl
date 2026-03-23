@@ -26,7 +26,8 @@ workflow PGxWorkflow {
         input:
             input_cram = input_cram,
             input_crai = input_crai,
-            sample_id =sample_id,
+            sample_id = sample_id,
+            accession_id = accession_id,
             test_code = test_code,
             reference_fasta = reference_fasta,
             reference_fasta_fai = reference_fasta_fai,
@@ -40,7 +41,7 @@ workflow PGxWorkflow {
     call PGxTask {
         input:
             sample_id = sample_id,
-            accession_id =accession_id,
+            accession_id = accession_id,
             test_code = test_code,
             roi_bed = roi_bed,
             workflow_fileset = workflow_fileset,
@@ -51,8 +52,8 @@ workflow PGxWorkflow {
     }
 
     output {
-        File FDA_report = PGxTask.FDA_report
-        File CPIC_report = PGxTask.CPIC_report
+        File summary_report = PGxTask.summary_report
+        File details_report = PGxTask.details_report
         File genotype_xlsx = PGxTask.genotype_xlsx
         File genotype_txt = PGxTask.genotype_txt
     }
@@ -100,9 +101,9 @@ task PGxTask {
     }
 
     output {
-        File CPIC_report = "~{out_path}/~{sample_id}_~{test_code}.CPIC_report.xlsx"
-        File FDA_report = "~{out_path}/~{sample_id}_~{test_code}.FDA_report.xlsx"
-        File genotype_xlsx = "~{out_path}/~{sample_id}_~{test_code}.genotype.xlsx"
-        File genotype_txt = "~{out_path}/~{sample_id}_~{test_code}.genotype.txt"
+        File summary_report = "~{out_path}/~{accession_id}_~{sample_id}_~{test_code}.summary_report.xlsx"
+        File details_report = "~{out_path}/~{accession_id}_~{sample_id}_~{test_code}.details_report.xlsx"
+        File genotype_xlsx = "~{out_path}/~{accession_id}_~{sample_id}_~{test_code}.genotype.xlsx"
+        File genotype_txt = "~{out_path}/~{accession_id}_~{sample_id}_~{test_code}.genotype.txt"
     }
 }
