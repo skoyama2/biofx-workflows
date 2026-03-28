@@ -52,9 +52,9 @@ task BuildOneChromosomeReference {
     Float window_cm
     Int window_count
 
-    String docker_image = "us.gcr.io/broad-dsde-methods/glimpse:kachulis_ck_bam_reader_retry_cf5822c"
-    String glimpse_chunk = "GLIMPSE_chunk"
-    String glimpse_split_reference = "GLIMPSE_split_reference"
+    String docker = "skoyamamd/glimpse2:latest"
+    String glimpse_chunk = "/usr/local/bin/GLIMPSE2_chunk"
+    String glimpse_split_reference = "/usr/local/bin/GLIMPSE2_split_reference"
 
     Int disk_gb = 100
     Int memory_gb = 16
@@ -101,9 +101,10 @@ task BuildOneChromosomeReference {
   }
 
   runtime {
-    docker: docker_image
+    docker: docker
     cpu: cpu
     memory: memory_gb + " GiB"
     disks: "local-disk " + disk_gb + " HDD"
   }
+
 }
