@@ -329,15 +329,6 @@ workflows:
       tags:
         - Glimpse2SplitReference_*
 
-  - name: Glimpse2MakeReference
-    subclass: WDL
-    primaryDescriptorPath: /workflows/lowpassimputation/Glimpse2MakeReference.wdl
-    filters:
-      branches:
-        - /.*[a-zA-Z0-9].*/
-      tags:
-        - Glimpse2MakeReference_*
-
   - name: PRSMakeAdjustmentModel
     subclass: WDL
     primaryDescriptorPath: /workflows/prs/subwdls/MakeAdjustmentModelWorkflow.wdl
@@ -530,3 +521,24 @@ workflows:
         - /.*[a-zA-Z0-9].*/
       tags:
         - FASTOutputParser_*
+
+  - name: Glimpse2LowPassImputationCrams
+    subclass: WDL
+    primaryDescriptorPath: /workflows/bge_processing/Glimpse2LowPassImputationCrams.wdl
+    readMePath: /workflows/bge_processing/Glimpse2LowPassImputationCrams.md
+    filters:
+      branches:
+        - /.*[a-zA-Z0-9].*/
+      tags:
+        - /Glimpse2LowPassImputationCram_*
+
+  - name: Glimpse2MakeReference.wdl
+    subclass: WDL
+    primaryDescriptorPath: /workflows/bge_processing/Glimpse2MakeReference.wdl
+    readMePath: /workflows/bge_processing/Glimpse2MakeReference.md
+    filters:
+      branches:
+        - /.*[a-zA-Z0-9].*/
+      tags:
+        - /Glimpse2MakeReference_*
+
