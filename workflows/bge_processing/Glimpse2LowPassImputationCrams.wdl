@@ -69,7 +69,8 @@ task GlimpseLigate {
         Int preemptible = 1
         Int max_retries = 2
 
-        String glimpse_ligate= "/usr/local/bin/GLIMPSE2_phase"
+        String glimpse_ligate= "/usr/local/bin/GLIMPSE2_ligate"
+        String docker
 
     }
 
