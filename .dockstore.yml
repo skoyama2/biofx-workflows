@@ -328,6 +328,16 @@ workflows:
         - /.*[a-zA-Z0-9].*/
       tags:
         - Glimpse2SplitReference_*
+
+  - name: Glimpse2MakeReference
+    subclass: WDL
+    primaryDescriptorPath: /workflows/lowpassimputation/Glimpse2MakeReference.wdl
+    filters:
+      branches:
+        - /.*[a-zA-Z0-9].*/
+      tags:
+        - Glimpse2MakeReference_*
+
   - name: PRSMakeAdjustmentModel
     subclass: WDL
     primaryDescriptorPath: /workflows/prs/subwdls/MakeAdjustmentModelWorkflow.wdl
