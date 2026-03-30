@@ -14,8 +14,9 @@ workflow BatchCramFiles {
   Int n_this = if (batch_idx + 1) * batch_size < total_crams then batch_size else total_crams - row_start
 
   scatter (i in range(n_this)) {
-    File cram = manifest_rows[header_offset + row_start + i][0]
-    File crai = manifest_rows[header_offset + row_start + i][1]
+    Int idx = header_offset + row_start + i
+    File cram = manifest_rows[idx][0]
+    File crai = manifest_rows[idx][1]
   }
 
   output {
