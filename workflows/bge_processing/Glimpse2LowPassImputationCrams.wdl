@@ -168,11 +168,13 @@ task GlimpseLigate {
 
     command <<<
 
+    set -euo pipefail
+    # GLIMPSE2_ligate writes BCF (same as phase inputs); do not use a .vcf.gz name or bcftools mis-detects format.
     ~{glimpse_ligate}  \
         --input ~{write_lines(imputed_chunks)} \
-        --output ligated.vcf.gz
+        --output ligated.bcf
 
-    bcftools sort ligated.vcf.gz -Ou \
+    bcftools sort ligated.bcf -Ou \
         | bcftools annotate --set-id '%CHROM:%POS:%REF:%ALT' -Ou \
         | bcftools norm -d both -Oz -o ligated_cleaned.vcf.gz
 
@@ -242,6 +244,8 @@ task GlimpsePhase {
             --reference ~{reference_chunk} \
             --output phase_output.bcf \
             --threads 1
+
+        bcftools index -f phase_output.bcf
 
     >>>
 
