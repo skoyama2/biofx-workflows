@@ -173,9 +173,28 @@ task GlimpseLigate {
     command <<<
 
     set -euo pipefail
+    chunks_raw_list=~{write_lines(imputed_chunks)}
+    chunks_sorted_list=chunks.sorted.list
+    chunks_meta=chunks.meta.tsv
+
+    # Keep ligate input order genomic (not call/shard order), otherwise GLIMPSE2 can fail with:
+    # "Overlap is empty".
+    : > "${chunks_meta}"
+    while IFS= read -r bcf; do
+        chrom=$(bcftools query -f '%CHROM\n' "${bcf}" | awk 'NR==1 {print; exit}')
+        pos=$(bcftools query -f '%POS\n' "${bcf}" | awk 'NR==1 {print; exit}')
+        if [ -z "${chrom}" ] || [ -z "${pos}" ]; then
+            echo "ERROR: empty or unreadable chunk BCF: ${bcf}" >&2
+            exit 1
+        fi
+        printf '%s\t%s\t%s\n' "${chrom}" "${pos}" "${bcf}" >> "${chunks_meta}"
+    done < "${chunks_raw_list}"
+
+    sort -k1,1V -k2,2n "${chunks_meta}" | cut -f3 > "${chunks_sorted_list}"
+
     # GLIMPSE2_ligate writes BCF (same as phase inputs); do not use a .vcf.gz name or bcftools mis-detects format.
     ~{glimpse_ligate}  \
-        --input ~{write_lines(imputed_chunks)} \
+        --input "${chunks_sorted_list}" \
         --output ligated.bcf
 
     bcftools sort ligated.bcf -Ou \
