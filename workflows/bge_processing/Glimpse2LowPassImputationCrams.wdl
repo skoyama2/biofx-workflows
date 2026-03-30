@@ -107,7 +107,7 @@ task MergeBatchBcfs {
 
     input {
         Array[File] batch_bcfs
-        # Same order as batch_bcfs; Cromwell renames localized paths, so pair and copy as name.bcf + name.bcf.csi.
+        # Same gather order as batch_bcfs (per-batch ligate outputs).
         Array[File] batch_bcf_indices
         String output_basename
         File ref_fasta_dict
@@ -124,19 +124,31 @@ task MergeBatchBcfs {
         set -euo pipefail
         bcf_list=~{write_lines(batch_bcfs)}
         csi_list=~{write_lines(batch_bcf_indices)}
+        n_bcf=$(wc -l < "${bcf_list}" | tr -d ' ')
+        n_csi=$(wc -l < "${csi_list}" | tr -d ' ')
+        if [ "${n_bcf}" != "${n_csi}" ]; then
+            echo "ERROR: batch BCF count (${n_bcf}) != index count (${n_csi})" >&2
+            exit 1
+        fi
+
         mkdir -p merge_staging
         merge_paths=merge.bcf.paths
         : > "${merge_paths}"
+        # Pair paths without process substitution (sh-safe): paste to a file, then read in this shell.
+        paste "${bcf_list}" "${csi_list}" > bcf_csi.pairs
         i=0
-        while IFS=$'\t' read -r bcf csi; do
-            [ -n "${bcf}" ] || continue
+        while IFS="$(printf '\t')" read -r bcf csi || [ -n "${bcf}" ]; do
+            bcf=$(printf '%s' "${bcf}" | tr -d '\r')
+            csi=$(printf '%s' "${csi}" | tr -d '\r')
+            [ -n "${bcf}" ] && [ -n "${csi}" ] || continue
             out="merge_staging/batch_${i}.bcf"
             cp -f "${bcf}" "${out}"
             cp -f "${csi}" "${out}.csi"
             echo "${PWD}/${out}" >> "${merge_paths}"
             i=$((i + 1))
-        done < <(paste "${bcf_list}" "${csi_list}")
+        done < bcf_csi.pairs
 
+        test -s "${merge_paths}" || { echo "ERROR: no batch BCFs to merge" >&2; exit 1; }
         bcftools merge -l "${merge_paths}" -Ob -o merged_raw.bcf
         bcftools sort merged_raw.bcf -Ou \
             | bcftools annotate --set-id '%CHROM:%POS:%REF:%ALT' -Ou \
