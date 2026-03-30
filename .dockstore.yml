@@ -532,7 +532,7 @@ workflows:
       tags:
         - /Glimpse2LowPassImputationCram_*
 
-  - name: Glimpse2MakeReference.wdl
+  - name: Glimpse2MakeReference
     subclass: WDL
     primaryDescriptorPath: /workflows/bge_processing/Glimpse2MakeReference.wdl
     readMePath: /workflows/bge_processing/Glimpse2MakeReference.md
