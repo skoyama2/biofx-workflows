@@ -35,12 +35,16 @@ workflow Glimpse2LowPassImputationCrams {
     }
 
     Int header_offset = if manifest_has_header then 1 else 0
-    Int total_lines = length(read_lines(sample_manifest))
-    Int total_crams = total_lines - header_offset
+    # Must match BatchCramFiles indexing (read_tsv rows). read_lines(sample_manifest) can disagree
+    # (e.g. blank lines) and made only the last batch line up — batch0/1 then fail, last batch succeeds.
+    Array[Array[String]] manifest_rows = read_tsv(sample_manifest)
+    Int manifest_nrows = length(manifest_rows)
+    Int total_crams = manifest_nrows - header_offset
     Int batch_size = if max_files_per_ligate > 0 then max_files_per_ligate else total_crams
     Int num_batches = if max_files_per_ligate <= 0 || total_crams <= max_files_per_ligate then 1 else (total_crams + max_files_per_ligate - 1) / max_files_per_ligate
 
-    Array[Array[String]] manifest_rows = read_tsv(sample_manifest)
+    # Hoist once: avoids Terra/Cromwell oddities with read_lines nested inside the batch scatter.
+    Array[String] reference_chunk_lines = read_lines(reference_chunks)
 
     scatter (batch_idx in range(num_batches)) {
 
@@ -53,7 +57,7 @@ workflow Glimpse2LowPassImputationCrams {
                 total_crams = total_crams
         }
 
-        scatter (reference_chunk in read_lines(reference_chunks)) {
+        scatter (reference_chunk in reference_chunk_lines) {
 
             call GlimpsePhase {
                 input:
