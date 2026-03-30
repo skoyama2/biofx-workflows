@@ -1,0 +1,100 @@
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+WORKDIR /root
+
+# Build dependencies
+RUN \
+  apt-get update && \
+  apt-get install -y \
+    build-essential \
+    autoconf \
+    automake \
+    libtool \
+    pkg-config \
+    zlib1g-dev \
+    libbz2-dev \
+    liblzma-dev \
+    libncurses5-dev \
+    libboost-all-dev \
+    wget \
+    ca-certificates && \
+  apt-get clean && \
+  rm -rf /var/lib/apt/lists/*
+
+# htslib (includes tabix, bgzip)
+# Built without libcurl so GLIMPSE2 can link against libhts.a without needing -lcurl
+RUN \
+  cd /tmp && \
+  wget https://github.com/samtools/htslib/releases/download/1.21/htslib-1.21.tar.bz2 && \
+  tar -xjf htslib-1.21.tar.bz2 && \
+  cd htslib-1.21 && \
+  autoreconf -i && \
+  ./configure --prefix=/usr/local --disable-libcurl && \
+  make -j$(nproc) && \
+  make install && \
+  cd /tmp && rm -rf htslib-1.21 htslib-1.21.tar.bz2
+
+# bcftools
+RUN \
+  cd /tmp && \
+  wget https://github.com/samtools/bcftools/releases/download/1.21/bcftools-1.21.tar.bz2 && \
+  tar -xjf bcftools-1.21.tar.bz2 && \
+  cd bcftools-1.21 && \
+  ./configure --prefix=/usr/local && \
+  make -j$(nproc) && \
+  make install && \
+  cd /tmp && rm -rf bcftools-1.21 bcftools-1.21.tar.bz2
+
+# htslib source for GLIMPSE2 (without curl, at /tmp/htslib-1.21 as expected by GLIMPSE2 Makefile)
+RUN \
+  cd /tmp && \
+  wget https://github.com/samtools/htslib/releases/download/1.21/htslib-1.21.tar.bz2 && \
+  tar -xjf htslib-1.21.tar.bz2 && \
+  cd htslib-1.21 && \
+  autoreconf -i && \
+  ./configure --disable-libcurl && \
+  make -j$(nproc) && \
+  rm -f /tmp/htslib-1.21.tar.bz2
+
+# GLIMPSE2 v2.0.0 (build from source)
+RUN \
+  cd /tmp && \
+  wget https://github.com/odelaneau/GLIMPSE/archive/refs/tags/v2.0.0.tar.gz && \
+  tar -xzf v2.0.0.tar.gz && \
+  cd GLIMPSE-2.0.0 && \
+  make -j$(nproc) && \
+  cp chunk/bin/GLIMPSE2_chunk /usr/local/bin/ && \
+  cp phase/bin/GLIMPSE2_phase /usr/local/bin/ && \
+  cp ligate/bin/GLIMPSE2_ligate /usr/local/bin/ && \
+  cp concordance/bin/GLIMPSE2_concordance /usr/local/bin/ && \
+  cp split_reference/bin/GLIMPSE2_split_reference /usr/local/bin/ && \
+  cd /tmp && rm -rf GLIMPSE-2.0.0 v2.0.0.tar.gz htslib-1.21
+
+ENV LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+
+# Java
+RUN \
+  apt-get update && \
+  apt-get install -y openjdk-21-jre-headless && \
+  apt-get clean && \
+  rm -rf /var/lib/apt/lists/*
+
+# Picard
+RUN \
+  wget -O /picard.jar \
+    https://github.com/broadinstitute/picard/releases/download/3.3.0/picard.jar
+
+# GATK
+RUN \
+  apt-get update && \
+  apt-get install -y unzip && \
+  apt-get clean && \
+  rm -rf /var/lib/apt/lists/* && \
+  wget -O /tmp/gatk.zip \
+    https://github.com/broadinstitute/gatk/releases/download/4.6.2.0/gatk-4.6.2.0.zip && \
+  unzip /tmp/gatk.zip -d /tmp/gatk && \
+  find /tmp/gatk -name "*.jar" | head -1 | xargs -I{} mv {} /gatk.jar && \
+  rm -rf /tmp/gatk /tmp/gatk.zip
+
