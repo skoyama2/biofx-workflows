@@ -29,7 +29,7 @@ workflow Glimpse2LowPassImputationCrams {
         # 0 or negative = no sample batching.
         Int max_files_per_ligate = 0
 
-        # If true, merge per-batch VCFs into one with bcftools merge (after all batches).
+        # If true, merge per-batch BCFs into one with bcftools merge (after all batches).
         Boolean merge_batch_outputs = false
 
     }
@@ -70,8 +70,8 @@ workflow Glimpse2LowPassImputationCrams {
 
         call GlimpseLigate {
             input:
-                imputed_chunks = GlimpsePhase.imputed_vcf,
-                imputed_chunks_indices = GlimpsePhase.imputed_vcf_index,
+                imputed_chunks = GlimpsePhase.imputed_bcf,
+                imputed_chunks_indices = GlimpsePhase.imputed_bcf_index,
                 ref_fasta_dict = ref_fasta_dict,
                 output_basename = output_basename + ".batch" + batch_idx,
                 docker = docker
@@ -80,9 +80,9 @@ workflow Glimpse2LowPassImputationCrams {
     }
 
     if (merge_batch_outputs && num_batches > 1) {
-        call MergeBatchVcfs {
+        call MergeBatchBcfs {
             input:
-                batch_vcfs = GlimpseLigate.imputed_vcf,
+                batch_bcfs = GlimpseLigate.imputed_bcf,
                 output_basename = output_basename,
                 ref_fasta_dict = ref_fasta_dict,
                 docker = docker
@@ -90,18 +90,18 @@ workflow Glimpse2LowPassImputationCrams {
     }
 
     output {
-        Array[File] batch_imputed_vcf = GlimpseLigate.imputed_vcf
-        Array[File] batch_imputed_vcf_index = GlimpseLigate.imputed_vcf_index
-        File? merged_imputed_vcf = MergeBatchVcfs.merged_vcf
-        File? merged_imputed_vcf_index = MergeBatchVcfs.merged_vcf_index
+        Array[File] batch_imputed_bcf = GlimpseLigate.imputed_bcf
+        Array[File] batch_imputed_bcf_index = GlimpseLigate.imputed_bcf_index
+        File? merged_imputed_bcf = MergeBatchBcfs.merged_bcf
+        File? merged_imputed_bcf_index = MergeBatchBcfs.merged_bcf_index
     }
 
 }
 
-task MergeBatchVcfs {
+task MergeBatchBcfs {
 
     input {
-        Array[File] batch_vcfs
+        Array[File] batch_bcfs
         String output_basename
         File ref_fasta_dict
         String docker
@@ -115,16 +115,16 @@ task MergeBatchVcfs {
     command <<<
 
         set -euo pipefail
-        bcftools merge -l ~{write_lines(batch_vcfs)} -Oz -o merged_raw.vcf.gz
-        bcftools sort merged_raw.vcf.gz -Ou \
+        bcftools merge -l ~{write_lines(batch_bcfs)} -Ob -o merged_raw.bcf
+        bcftools sort merged_raw.bcf -Ou \
             | bcftools annotate --set-id '%CHROM:%POS:%REF:%ALT' -Ou \
-            | bcftools norm -d both -Oz -o merged_cleaned.vcf.gz
-        bcftools view -h --no-version merged_cleaned.vcf.gz > old_header.vcf
+            | bcftools norm -d both -Ob -o merged_cleaned.bcf
+        bcftools view -h --no-version merged_cleaned.bcf > old_header.vcf
         java -jar /picard.jar UpdateVcfSequenceDictionary \
             -I old_header.vcf \
             --SD ~{ref_fasta_dict} -O new_header.vcf
-        bcftools reheader -h new_header.vcf -o ~{output_basename}.merged.imputed.vcf.gz merged_cleaned.vcf.gz
-        tabix ~{output_basename}.merged.imputed.vcf.gz
+        bcftools reheader -h new_header.vcf -o ~{output_basename}.merged.imputed.bcf merged_cleaned.bcf
+        bcftools index -f ~{output_basename}.merged.imputed.bcf
 
     >>>
 
@@ -138,8 +138,8 @@ task MergeBatchVcfs {
     }
 
     output {
-        File merged_vcf = "~{output_basename}.merged.imputed.vcf.gz"
-        File merged_vcf_index = "~{output_basename}.merged.imputed.vcf.gz.tbi"
+        File merged_bcf = "~{output_basename}.merged.imputed.bcf"
+        File merged_bcf_index = "~{output_basename}.merged.imputed.bcf.csi"
     }
 
 }
@@ -176,10 +176,10 @@ task GlimpseLigate {
 
     bcftools sort ligated.bcf -Ou \
         | bcftools annotate --set-id '%CHROM:%POS:%REF:%ALT' -Ou \
-        | bcftools norm -d both -Oz -o ligated_cleaned.vcf.gz
+        | bcftools norm -d both -Ob -o ligated_cleaned.bcf
 
     bcftools view \
-        -h --no-version ligated_cleaned.vcf.gz > old_header.vcf
+        -h --no-version ligated_cleaned.bcf > old_header.vcf
 
     java -jar /picard.jar UpdateVcfSequenceDictionary \
         -I old_header.vcf  \
@@ -187,10 +187,10 @@ task GlimpseLigate {
 
     bcftools reheader \
         -h new_header.vcf \
-        -o ~{output_basename}.imputed.vcf.gz \
-        ligated_cleaned.vcf.gz
+        -o ~{output_basename}.imputed.bcf \
+        ligated_cleaned.bcf
 
-    tabix ~{output_basename}.imputed.vcf.gz
+    bcftools index -f ~{output_basename}.imputed.bcf
 
     >>>
 
@@ -204,8 +204,8 @@ task GlimpseLigate {
     }
 
     output {
-        File imputed_vcf = "~{output_basename}.imputed.vcf.gz"
-        File imputed_vcf_index = "~{output_basename}.imputed.vcf.gz.tbi"
+        File imputed_bcf = "~{output_basename}.imputed.bcf"
+        File imputed_bcf_index = "~{output_basename}.imputed.bcf.csi"
     }
 
 }
@@ -259,8 +259,8 @@ task GlimpsePhase {
     }
 
     output {
-        File imputed_vcf = "phase_output.bcf"
-        File imputed_vcf_index = "phase_output.bcf.csi"
+        File imputed_bcf = "phase_output.bcf"
+        File imputed_bcf_index = "phase_output.bcf.csi"
     }
 
 }
