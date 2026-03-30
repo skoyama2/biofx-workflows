@@ -173,16 +173,21 @@ task GlimpseLigate {
     command <<<
 
     set -euo pipefail
+    trap 'echo "ERROR: GlimpseLigate failed at line ${LINENO}" >&2' ERR
     chunks_raw_list=~{write_lines(imputed_chunks)}
     chunks_sorted_list=chunks.sorted.list
     chunks_meta=chunks.meta.tsv
+    echo "INFO: raw chunk count = $(wc -l < "${chunks_raw_list}")"
 
     # Keep ligate input order genomic (not call/shard order), otherwise GLIMPSE2 can fail with:
     # "Overlap is empty".
     : > "${chunks_meta}"
     while IFS= read -r bcf; do
-        chrom=$(bcftools query -f '%CHROM\n' "${bcf}" | awk 'NR==1 {print; exit}')
-        pos=$(bcftools query -f '%POS\n' "${bcf}" | awk 'NR==1 {print; exit}')
+        [ -n "${bcf}" ] || continue
+        echo "INFO: scan chunk ${bcf}"
+        first_record=$(bcftools query -f '%CHROM\t%POS\n' "${bcf}" | awk 'NR==1 {print; exit}' || true)
+        chrom=$(printf '%s\n' "${first_record}" | cut -f1)
+        pos=$(printf '%s\n' "${first_record}" | cut -f2)
         if [ -z "${chrom}" ] || [ -z "${pos}" ]; then
             echo "ERROR: empty or unreadable chunk BCF: ${bcf}" >&2
             exit 1
@@ -191,6 +196,8 @@ task GlimpseLigate {
     done < "${chunks_raw_list}"
 
     sort -k1,1V -k2,2n "${chunks_meta}" | cut -f3 > "${chunks_sorted_list}"
+    echo "INFO: sorted chunk list"
+    cat "${chunks_sorted_list}"
 
     # GLIMPSE2_ligate writes BCF (same as phase inputs); do not use a .vcf.gz name or bcftools mis-detects format.
     ~{glimpse_ligate}  \
