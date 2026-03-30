@@ -87,6 +87,7 @@ workflow Glimpse2LowPassImputationCrams {
         call MergeBatchBcfs {
             input:
                 batch_bcfs = GlimpseLigate.imputed_bcf,
+                batch_bcf_indices = GlimpseLigate.imputed_bcf_index,
                 output_basename = output_basename,
                 ref_fasta_dict = ref_fasta_dict,
                 docker = docker
@@ -106,6 +107,8 @@ task MergeBatchBcfs {
 
     input {
         Array[File] batch_bcfs
+        # Same order as batch_bcfs; Cromwell renames localized paths, so pair and copy as name.bcf + name.bcf.csi.
+        Array[File] batch_bcf_indices
         String output_basename
         File ref_fasta_dict
         String docker
@@ -119,7 +122,22 @@ task MergeBatchBcfs {
     command <<<
 
         set -euo pipefail
-        bcftools merge -l ~{write_lines(batch_bcfs)} -Ob -o merged_raw.bcf
+        bcf_list=~{write_lines(batch_bcfs)}
+        csi_list=~{write_lines(batch_bcf_indices)}
+        mkdir -p merge_staging
+        merge_paths=merge.bcf.paths
+        : > "${merge_paths}"
+        i=0
+        while IFS=$'\t' read -r bcf csi; do
+            [ -n "${bcf}" ] || continue
+            out="merge_staging/batch_${i}.bcf"
+            cp -f "${bcf}" "${out}"
+            cp -f "${csi}" "${out}.csi"
+            echo "${PWD}/${out}" >> "${merge_paths}"
+            i=$((i + 1))
+        done < <(paste "${bcf_list}" "${csi_list}")
+
+        bcftools merge -l "${merge_paths}" -Ob -o merged_raw.bcf
         bcftools sort merged_raw.bcf -Ou \
             | bcftools annotate --set-id '%CHROM:%POS:%REF:%ALT' -Ou \
             | bcftools norm -d both -Ob -o merged_cleaned.bcf
