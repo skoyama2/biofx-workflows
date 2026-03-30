@@ -1,14 +1,17 @@
 version 1.0
 
+import "BatchCramFiles.wdl" as batch_files
+
 workflow Glimpse2LowPassImputationCrams {
 
     input {
 
         String pipeline_version = "0.0.1"
 
-        Array[File] crams
-        Array[File] crais
-        Array[String] sample_ids
+        # TAB-separated: cram_path<TAB>crai_path<TAB>sampleID (one sample per line).
+        # Optional header line; set manifest_has_header accordingly.
+        File sample_manifest
+
         File reference_chunks
         String output_basename
 
@@ -18,10 +21,12 @@ workflow Glimpse2LowPassImputationCrams {
 
         String docker
 
-        # When set > 0 and length(crams) exceeds this value, samples are split into
+        Boolean manifest_has_header = true
+
+        # When set > 0 and sample count exceeds this value, samples are split into
         # ceil(N / max_files_per_ligate) batches. Each batch runs phase per reference
         # chunk, then one ligate per batch (output_basename.batch0, .batch1, ...).
-        # 0 or negative = no sample batching (same behavior as before).
+        # 0 or negative = no sample batching.
         Int max_files_per_ligate = 0
 
         # If true, merge per-batch VCFs into one with bcftools merge (after all batches).
@@ -29,30 +34,31 @@ workflow Glimpse2LowPassImputationCrams {
 
     }
 
-    Int total_crams = length(crams)
+    Int header_offset = if manifest_has_header then 1 else 0
+    Int total_lines = length(read_lines(sample_manifest))
+    Int total_crams = total_lines - header_offset
     Int batch_size = if max_files_per_ligate > 0 then max_files_per_ligate else total_crams
     Int num_batches = if max_files_per_ligate <= 0 || total_crams <= max_files_per_ligate then 1 else (total_crams + max_files_per_ligate - 1) / max_files_per_ligate
 
+    Array[Array[String]] manifest_rows = read_tsv(sample_manifest)
+
     scatter (batch_idx in range(num_batches)) {
 
-        call SelectSampleBatch {
+        call batch_files.BatchCramFiles {
             input:
-                crams = crams,
-                crais = crais,
-                sample_ids = sample_ids,
+                manifest_rows = manifest_rows,
+                header_offset = header_offset,
                 batch_idx = batch_idx,
                 batch_size = batch_size,
-                total_crams = total_crams,
-                max_files_per_ligate = max_files_per_ligate,
-                docker = docker
+                total_crams = total_crams
         }
 
         scatter (reference_chunk in read_lines(reference_chunks)) {
 
             call GlimpsePhase {
                 input:
-                    crams = SelectSampleBatch.crams_batch,
-                    crais = SelectSampleBatch.crais_batch,
+                    crams = BatchCramFiles.crams,
+                    crais = BatchCramFiles.crais,
                     reference_chunk = reference_chunk,
                     ref_fasta = ref_fasta,
                     ref_fasta_index = ref_fasta_index,
@@ -88,64 +94,6 @@ workflow Glimpse2LowPassImputationCrams {
         Array[File] batch_imputed_vcf_index = GlimpseLigate.imputed_vcf_index
         File? merged_imputed_vcf = MergeBatchVcfs.merged_vcf
         File? merged_imputed_vcf_index = MergeBatchVcfs.merged_vcf_index
-    }
-
-}
-
-task SelectSampleBatch {
-
-    input {
-        Array[File] crams
-        Array[File] crais
-        Array[String] sample_ids
-        Int batch_idx
-        Int batch_size
-        Int total_crams
-        Int max_files_per_ligate
-        String docker
-    }
-
-    Int start_line = batch_idx * batch_size + 1
-    Int end_line = if (batch_idx + 1) * batch_size < total_crams then (batch_idx + 1) * batch_size else total_crams
-
-    command <<<
-
-        set -euo pipefail
-        mkdir -p batch_links
-
-        if [[ ~{max_files_per_ligate} -le 0 ]] || [[ ~{total_crams} -le ~{max_files_per_ligate} ]]; then
-            line_num=0
-            paste ~{write_lines(crams)} ~{write_lines(crais)} ~{write_lines(sample_ids)} | while IFS=$'\t' read -r cram crai sample; do
-                line_num=$((line_num + 1))
-                ord=$(printf '%07d' "${line_num}")
-                ln -s "${cram}" "batch_links/${ord}.cram"
-                ln -s "${crai}" "batch_links/${ord}.cram.crai"
-            done
-        else
-            line_num=0
-            paste ~{write_lines(crams)} ~{write_lines(crais)} ~{write_lines(sample_ids)} | while IFS=$'\t' read -r cram crai sample; do
-                line_num=$((line_num + 1))
-                if [[ ${line_num} -lt ~{start_line} ]] || [[ ${line_num} -gt ~{end_line} ]]; then
-                    continue
-                fi
-                ord=$(printf '%07d' "${line_num}")
-                ln -s "${cram}" "batch_links/${ord}.cram"
-                ln -s "${crai}" "batch_links/${ord}.cram.crai"
-            done
-        fi
-
-    >>>
-
-    output {
-        Array[File] crams_batch = glob("batch_links/*.cram")
-        Array[File] crais_batch = glob("batch_links/*.cram.crai")
-    }
-
-    runtime {
-        docker: docker
-        disks: "local-disk 50 HDD"
-        memory: "4 GiB"
-        cpu: 1
     }
 
 }
@@ -286,6 +234,7 @@ task GlimpsePhase {
 
     command <<<
 
+        set -euo pipefail
         sort -V ~{write_lines(crams)} > sorted_crams.list
 
         ~{glimpse_phase}  \
