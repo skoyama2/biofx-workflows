@@ -33,68 +33,9 @@ workflow BuildGlimpseReferenceChunks {
     }
   }
 
-  Array[File] all_split_bins = flatten(BuildOneChromosomeReference.bin_files)
-
-  call MergeSplitBinPathLists {
-    input:
-      all_bins = all_split_bins
-  }
-
   output {
     Array[File] chunk_txts = BuildOneChromosomeReference.chunk_txt
-    File split_outputs = MergeSplitBinPathLists.merged_bin_paths
-  }
-}
-
-task MergeSplitBinPathLists {
-  input {
-    Array[File] all_bins
-    String docker = "ubuntu:22.04"
-  }
-
-  command <<<
-    set -euo pipefail
-    python3 << 'PY'
-import re
-
-def chr_order(path):
-    m = re.search(r"chr(\d+|X|Y|M)(?:[^0-9]|$)", path)
-    if not m:
-        return 99
-    c = m.group(1)
-    if c.isdigit():
-        return int(c)
-    return {"X": 23, "Y": 24, "M": 25}.get(c, 99)
-
-
-def pos_hint(path):
-    base = path.rsplit("/", 1)[-1]
-    nums = [int(x) for x in re.findall(r"\d+", base)]
-    return nums[0] if nums else 0
-
-
-def sort_key(path):
-    return (chr_order(path), pos_hint(path), path)
-
-
-with open("~{write_lines(all_bins)}") as f:
-    lines = [ln.strip() for ln in f if ln.strip()]
-
-lines.sort(key=sort_key)
-with open("merged_split_bin_paths.txt", "w") as out:
-    out.write("\n".join(lines) + "\n")
-PY
-  >>>
-
-  output {
-    File merged_bin_paths = "merged_split_bin_paths.txt"
-  }
-
-  runtime {
-    docker: docker
-    cpu: 1
-    memory: "1 GiB"
-    disks: "local-disk 10 HDD"
+    Array[File] split_bin_files = flatten(BuildOneChromosomeReference.bin_files)
   }
 }
 
