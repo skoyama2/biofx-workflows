@@ -26,8 +26,8 @@ workflow Glimpse2LowPassImputationCrams {
         # When set > 0 and sample count exceeds this value, samples are split into
         # ceil(N / max_files_per_ligate) batches. Each batch runs phase per reference
         # chunk, then one ligate per batch (output_basename.batch0.imputed.bcf, ...).
-        # 0 or negative = no sample batching: single ligate uses output_basename.imputed.bcf
-        # and is exposed as merged_imputed_bcf (not batch_imputed_bcf).
+        # 0 or negative = no sample batching: single ligate uses output_basename.imputed.bcf.
+        # merged_imputed_bcf is filled via ExposeSingleBatchMerged (Terra/Cromwell-friendly).
         Int max_files_per_ligate = 0
 
         # If true, merge per-batch BCFs into one with bcftools merge (after all batches).
@@ -84,6 +84,15 @@ workflow Glimpse2LowPassImputationCrams {
 
     }
 
+    if (num_batches == 1) {
+        call ExposeSingleBatchMerged {
+            input:
+                batch_imputed_bcf = GlimpseLigate.imputed_bcf[0],
+                batch_imputed_bcf_index = GlimpseLigate.imputed_bcf_index[0],
+                docker = docker
+        }
+    }
+
     if (merge_batch_outputs && num_batches > 1) {
         call MergeBatchBcfs {
             input:
@@ -96,10 +105,48 @@ workflow Glimpse2LowPassImputationCrams {
     }
 
     output {
-        Array[File] batch_imputed_bcf = if num_batches > 1 then GlimpseLigate.imputed_bcf else []
-        Array[File] batch_imputed_bcf_index = if num_batches > 1 then GlimpseLigate.imputed_bcf_index else []
-        File? merged_imputed_bcf = if num_batches == 1 then GlimpseLigate.imputed_bcf[0] else MergeBatchBcfs.merged_bcf
-        File? merged_imputed_bcf_index = if num_batches == 1 then GlimpseLigate.imputed_bcf_index[0] else MergeBatchBcfs.merged_bcf_index
+        Array[File] batch_imputed_bcf = GlimpseLigate.imputed_bcf
+        Array[File] batch_imputed_bcf_index = GlimpseLigate.imputed_bcf_index
+        File? merged_imputed_bcf = if num_batches == 1 then ExposeSingleBatchMerged.merged_bcf else MergeBatchBcfs.merged_bcf
+        File? merged_imputed_bcf_index = if num_batches == 1 then ExposeSingleBatchMerged.merged_bcf_index else MergeBatchBcfs.merged_bcf_index
+    }
+
+}
+
+# Terra/Cromwell can fail to surface workflow outputs built from scatter-gather [0] alone; this
+# call makes num_batches==1 merged outputs a normal task output (same files as the sole batch).
+task ExposeSingleBatchMerged {
+
+    input {
+        File batch_imputed_bcf
+        File batch_imputed_bcf_index
+        String docker
+        Int mem_gb = 1
+        Int disk_size_gb = 10
+        Int cpu = 1
+        Int preemptible = 0
+        Int max_retries = 0
+    }
+
+    command <<<
+
+        set -euo pipefail
+        true
+
+    >>>
+
+    runtime {
+        docker: docker
+        disks: "local-disk " + disk_size_gb + " HDD"
+        memory: mem_gb + " GiB"
+        cpu: cpu
+        preemptible: preemptible
+        maxRetries: max_retries
+    }
+
+    output {
+        File merged_bcf = batch_imputed_bcf
+        File merged_bcf_index = batch_imputed_bcf_index
     }
 
 }
