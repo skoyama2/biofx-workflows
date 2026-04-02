@@ -96,10 +96,10 @@ workflow Glimpse2LowPassImputationCrams {
     }
 
     output {
-        Array[File] batch_imputed_bcf = if num_batches > 1 then GlimpseLigate.imputed_bcf else []
-        Array[File] batch_imputed_bcf_index = if num_batches > 1 then GlimpseLigate.imputed_bcf_index else []
-        File? merged_imputed_bcf = if num_batches == 1 then GlimpseLigate.imputed_bcf[0] else MergeBatchBcfs.merged_bcf
-        File? merged_imputed_bcf_index = if num_batches == 1 then GlimpseLigate.imputed_bcf_index[0] else MergeBatchBcfs.merged_bcf_index
+        Array[File]? batch_bcf = if num_batches > 1 then GlimpseLigate.imputed_bcf else []
+        Array[File]? batch_bcf_index = if num_batches > 1 then GlimpseLigate.imputed_bcf_index else []
+        File imputed_bcf = if num_batches == 1 then GlimpseLigate.imputed_bcf[0] else MergeBatchBcfs.merged_bcf
+        File imputed_bcf_index = if num_batches == 1 then GlimpseLigate.imputed_bcf_index[0] else MergeBatchBcfs.merged_bcf_index
     }
 
 }
