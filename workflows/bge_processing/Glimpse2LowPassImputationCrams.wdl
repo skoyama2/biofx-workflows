@@ -25,8 +25,9 @@ workflow Glimpse2LowPassImputationCrams {
 
         # When set > 0 and sample count exceeds this value, samples are split into
         # ceil(N / max_files_per_ligate) batches. Each batch runs phase per reference
-        # chunk, then one ligate per batch (output_basename.batch0, .batch1, ...).
-        # 0 or negative = no sample batching.
+        # chunk, then one ligate per batch (output_basename.batch0.imputed.bcf, ...).
+        # 0 or negative = no sample batching: single ligate uses output_basename.imputed.bcf
+        # and is exposed as merged_imputed_bcf (not batch_imputed_bcf).
         Int max_files_per_ligate = 0
 
         # If true, merge per-batch BCFs into one with bcftools merge (after all batches).
@@ -77,7 +78,7 @@ workflow Glimpse2LowPassImputationCrams {
                 imputed_chunks = GlimpsePhase.imputed_bcf,
                 imputed_chunks_indices = GlimpsePhase.imputed_bcf_index,
                 ref_fasta_dict = ref_fasta_dict,
-                output_basename = output_basename + ".batch" + batch_idx,
+                output_basename = if num_batches > 1 then output_basename + ".batch" + batch_idx else output_basename,
                 docker = docker
         }
 
@@ -95,10 +96,10 @@ workflow Glimpse2LowPassImputationCrams {
     }
 
     output {
-        Array[File] batch_imputed_bcf = GlimpseLigate.imputed_bcf
-        Array[File] batch_imputed_bcf_index = GlimpseLigate.imputed_bcf_index
-        File? merged_imputed_bcf = MergeBatchBcfs.merged_bcf
-        File? merged_imputed_bcf_index = MergeBatchBcfs.merged_bcf_index
+        Array[File] batch_imputed_bcf = if num_batches > 1 then GlimpseLigate.imputed_bcf else []
+        Array[File] batch_imputed_bcf_index = if num_batches > 1 then GlimpseLigate.imputed_bcf_index else []
+        File? merged_imputed_bcf = if num_batches == 1 then GlimpseLigate.imputed_bcf[0] else MergeBatchBcfs.merged_bcf
+        File? merged_imputed_bcf_index = if num_batches == 1 then GlimpseLigate.imputed_bcf_index[0] else MergeBatchBcfs.merged_bcf_index
     }
 
 }
@@ -157,8 +158,8 @@ task MergeBatchBcfs {
         java -jar /picard.jar UpdateVcfSequenceDictionary \
             -I old_header.vcf \
             --SD ~{ref_fasta_dict} -O new_header.vcf
-        bcftools reheader -h new_header.vcf -o ~{output_basename}.merged.imputed.bcf merged_cleaned.bcf
-        bcftools index -f ~{output_basename}.merged.imputed.bcf
+        bcftools reheader -h new_header.vcf -o ~{output_basename}.imputed.bcf merged_cleaned.bcf
+        bcftools index -f ~{output_basename}.imputed.bcf
 
     >>>
 
@@ -172,8 +173,8 @@ task MergeBatchBcfs {
     }
 
     output {
-        File merged_bcf = "~{output_basename}.merged.imputed.bcf"
-        File merged_bcf_index = "~{output_basename}.merged.imputed.bcf.csi"
+        File merged_bcf = "~{output_basename}.imputed.bcf"
+        File merged_bcf_index = "~{output_basename}.imputed.bcf.csi"
     }
 
 }
