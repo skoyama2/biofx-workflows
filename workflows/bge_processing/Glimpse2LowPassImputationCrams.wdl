@@ -300,9 +300,15 @@ task GlimpsePhase {
         set -euo pipefail
         sort -V ~{write_lines(crams)} > sorted_crams.list
 
+        # CRAM decode: htslib expects <fasta_basename>.fai next to the FASTA path.
+        fasta_basename=$(basename ~{ref_fasta})
+        ln -sf ~{ref_fasta} "${fasta_basename}"
+        ln -sf ~{ref_fasta_index} "${fasta_basename}.fai"
+
         ~{glimpse_phase}  \
             --bam-list sorted_crams.list \
             --reference ~{reference_chunk} \
+            --fasta "${fasta_basename}" \
             --output phase_output.bcf \
             --threads 1
 
