@@ -33,6 +33,13 @@ workflow Glimpse2LowPassImputationCrams {
         # If true, merge per-batch BCFs into one with bcftools merge (after all batches).
         Boolean merge_batch_outputs = false
 
+        # Extra attempts after failure (preemptible, etc.). On Terra (Google backend), pair with
+        # workflow options JSON memory_retry_multiplier (see Glimpse2LowPassImputationCrams.workflow_options.json)
+        # so stderr OOM patterns trigger a retry with multiplied memory.
+        Int phase_max_retries = 3
+        Int ligate_max_retries = 2
+        Int merge_batch_max_retries = 2
+
     }
 
     Int header_offset = if manifest_has_header then 1 else 0
@@ -68,6 +75,7 @@ workflow Glimpse2LowPassImputationCrams {
                     ref_fasta = ref_fasta,
                     ref_fasta_index = ref_fasta_index,
                     ref_fasta_dict = ref_fasta_dict,
+                    max_retries = phase_max_retries,
                     docker = docker
             }
 
@@ -79,6 +87,7 @@ workflow Glimpse2LowPassImputationCrams {
                 imputed_chunks_indices = GlimpsePhase.imputed_bcf_index,
                 ref_fasta_dict = ref_fasta_dict,
                 output_basename = if num_batches > 1 then output_basename + ".batch" + batch_idx else output_basename,
+                max_retries = ligate_max_retries,
                 docker = docker
         }
 
@@ -91,6 +100,7 @@ workflow Glimpse2LowPassImputationCrams {
                 batch_bcf_indices = GlimpseLigate.imputed_bcf_index,
                 output_basename = output_basename,
                 ref_fasta_dict = ref_fasta_dict,
+                max_retries = merge_batch_max_retries,
                 docker = docker
         }
     }
