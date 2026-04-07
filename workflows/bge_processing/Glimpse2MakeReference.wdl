@@ -12,9 +12,10 @@ workflow BuildGlimpseReferenceChunks {
     Array[File] reference_csis
     Array[File] map_files
 
-    Float window_mb = 5.0
-    Float window_cm = 5.0
-    Int window_count = 150000
+    # Defaults match GLIMPSE2_chunk: minimal window size in Mb / cM / #variants.
+    Float window_mb = 4.0
+    Float window_cm = 4.0
+    Int window_count = 30000
 
     String chrX_nonpar_region = "chrX:2781480-155701382"
   }
