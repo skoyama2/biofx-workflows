@@ -8,7 +8,8 @@ workflow Glimpse2LowPassImputationCrams {
 
         String pipeline_version = "0.0.1"
 
-        # TAB-separated: cram_path<TAB>crai_path<TAB>sampleID (one sample per line).
+        # TAB-separated (one sample per line): col1 cram, col2 crai, col3 sample name (optional).
+        # When col3 is present (non-empty), it is written as column 2 of GLIMPSE2_phase --bam-list.
         # Optional header line; set manifest_has_header accordingly.
         File sample_manifest
 
@@ -71,6 +72,7 @@ workflow Glimpse2LowPassImputationCrams {
                 input:
                     crams = BatchCramFiles.crams,
                     crais = BatchCramFiles.crais,
+                    cram_phase_sample_names = BatchCramFiles.phase_sample_names,
                     reference_chunk = reference_chunk,
                     ref_fasta = ref_fasta,
                     ref_fasta_index = ref_fasta_index,
@@ -289,6 +291,8 @@ task GlimpsePhase {
 
         Array[File] crams
         Array[File] crais
+        # Parallel to crams; from manifest col3 when present. Empty string => single-column bam-list line.
+        Array[String] cram_phase_sample_names
 
         File ref_fasta
         File ref_fasta_index
@@ -311,18 +315,46 @@ task GlimpsePhase {
 
         cram_list=~{write_lines(crams)}
         crai_list=~{write_lines(crais)}
+        sample_list=~{write_lines(cram_phase_sample_names)}
 
         mkdir -p staged_crams
         
-        cat $cram_list | while read cram_path; do
-          ln -sf ${cram_path}  "staged_crams/$(basename ${cram_path})"
+        while IFS= read -r cram_path || [ -n "${cram_path}" ]; do
+          [ -n "${cram_path}" ] || continue
+          cram_path=$(printf '%s' "${cram_path}" | tr -d '\r')
+          ln -sf "${cram_path}" "staged_crams/$(basename "${cram_path}")"
+        done < "${cram_list}"
+
+        while IFS= read -r crai_path || [ -n "${crai_path}" ]; do
+          [ -n "${crai_path}" ] || continue
+          crai_path=$(printf '%s' "${crai_path}" | tr -d '\r')
+          ln -sf "${crai_path}" "staged_crams/$(basename "${crai_path}")"
+        done < "${crai_list}"
+
+        # Pair cram paths with optional sample IDs, sort by staged CRAM basename (same as sort -V on paths).
+        : > bam_list.unsorted.tsv
+        paste "${cram_list}" "${sample_list}" | while IFS="$(printf '\t')" read -r cram_path sample || [ -n "${cram_path}" ]; do
+          [ -n "${cram_path}" ] || continue
+          cram_path=$(printf '%s' "${cram_path}" | tr -d '\r')
+          sample=$(printf '%s' "${sample:-}" | tr -d '\r')
+          sample=$(printf '%s' "${sample}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+          staged="${PWD}/staged_crams/$(basename "${cram_path}")"
+          base="$(basename "${cram_path}")"
+          if [ -n "${sample}" ]; then
+            printf '%s\t%s\t%s\n' "${base}" "${staged}" "${sample}" >> bam_list.unsorted.tsv
+          else
+            printf '%s\t%s\n' "${base}" "${staged}" >> bam_list.unsorted.tsv
+          fi
         done
 
-        cat $crai_list | while read crai_path; do
-          ln -sf ${crai_path}  "staged_crams/$(basename ${crai_path})"
-        done
-
-        find staged_crams -maxdepth 1 -name '*.cram' -print | sort -V > sorted_crams.list
+        sort -t "$(printf '\t')" -k1,1V bam_list.unsorted.tsv | while IFS="$(printf '\t')" read -r _ staged sample_rest || [ -n "${staged}" ]; do
+          [ -n "${staged}" ] || continue
+          if [ -n "${sample_rest}" ]; then
+            printf '%s\t%s\n' "${staged}" "${sample_rest}"
+          else
+            printf '%s\n' "${staged}"
+          fi
+        done > sorted_crams.list
 
         ~{glimpse_phase}  \
             --bam-list sorted_crams.list \

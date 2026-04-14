@@ -17,10 +17,13 @@ workflow BatchCramFiles {
     Int idx = header_offset + row_start + i
     File cram = manifest_rows[idx][0]
     File crai = manifest_rows[idx][1]
+    # Optional 3rd column: sample name for GLIMPSE2_phase --bam-list (column 2). Empty if absent.
+    String phase_sample_name = if length(manifest_rows[idx]) > 2 then manifest_rows[idx][2] else ""
   }
 
   output {
     Array[File] crams = cram
     Array[File] crais = crai
+    Array[String] phase_sample_names = phase_sample_name
   }
 }
