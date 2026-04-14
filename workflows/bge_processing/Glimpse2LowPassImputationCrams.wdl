@@ -338,52 +338,76 @@ task GlimpsePhase {
         crai_list=~{write_lines(crais)}
         sample_list=~{write_lines(cram_phase_sample_names)}
 
+        has_any_sample=0
+
+        any_sample=$(cat "${sample_list}" | sort | uniq)
+
+        if [ -n "${any_sample}" ]; then
+          has_any_sample=1
+        fi
+
+        if [ "${has_any_sample}" -eq 1 ]; then
+
+          duplicate_samples=$(
+            while read sample; do
+              printf '%s\n' "${sample}"
+            done < "${sample_list}" | sort | uniq -d
+          )
+
+          if [ -n "${duplicate_samples}" ]; then
+            echo "ERROR: duplicate sample names are not allowed:" >&2
+            printf '%s\n' "${duplicate_samples}" >&2
+            exit 1
+          fi
+
+        fi
+
+        if [ "${has_any_sample}" -eq 0 ]; then
+
+          duplicate_cram_basenames=$(
+            while read cram_path; do
+              basename "${cram_path}"
+            done < "${cram_list}" | sort | uniq -d
+          )
+
+          if [ -n "${duplicate_cram_basenames}" ]; then
+            echo "ERROR: duplicate CRAM basenames are not allowed when sample names are empty:" >&2
+            printf '%s\n' "${duplicate_cram_basenames}" >&2
+            exit 1
+          fi
+
+        fi
+
         mkdir -p staged_crams
         
-        while read -r cram_path; do
-          ln -sf "${cram_path}" "staged_crams/$(basename "${cram_path}")"
-        done < "${cram_list}"
-
-        while read -r crai_path; do
-          ln -sf "${crai_path}" "staged_crams/$(basename "${crai_path}")"
-        done < "${crai_list}"
-
-        # Pair cram paths with optional sample IDs, sort by staged CRAM basename (same as sort -V on paths).
-
-        paste "${cram_list}" "${sample_list}" \
-          | while IFS="$(printf '\t')" read -r cram_path sample || [ -n "${cram_path}" ]; do
-          
-          # If cram_path is empty, skip the line
-          if [ -z "${cram_path}" ]; then
-            continue
-          fi
-
-          staged="${PWD}/staged_crams/$(basename "${cram_path}")"
-          base="$(basename "${cram_path}")"
+        paste "${cram_list}" "${crai_list}" "${sample_list}" \
+          | while IFS="$(printf '\t')" read -r cram_path crai_path sample; do
 
           if [ -n "${sample}" ]; then
+
+            ln -sf "${cram_path}" "staged_crams/${sample}.cram"
+            ln -sf "${crai_path}" "staged_crams/${sample}.cram.crai"
+
+            staged="${PWD}/staged_crams/${sample}.cram"
+            base="${sample}"
+
             printf '%s\t%s\t%s\n' "${base}" "${staged}" "${sample}"
+
           else
+
+            ln -sf "${cram_path}" "staged_crams/$(basename "${cram_path}")"
+            ln -sf "${crai_path}" "staged_crams/$(basename "${crai_path}")"
+
+            staged="${PWD}/staged_crams/$(basename "${cram_path}")"
+            base="$(basename "${cram_path}")"
+
             printf '%s\t%s\n' "${base}" "${staged}"
+
           fi
 
-        done > bam_list.unsorted.tsv
-
-        sort -t "$(printf '\t')" -k1,1V bam_list.unsorted.tsv \
-          | while IFS="$(printf '\t')" read -r _ staged sample_rest || [ -n "${staged}" ]; do
-
-          # If staged is empty, skip the line
-          if [ -z "${staged}" ]; then
-            continue
-          fi
-
-          if [ -n "${sample_rest}" ]; then
-            printf '%s\t%s\n' "${staged}" "${sample_rest}"
-          else
-            printf '%s\n' "${staged}"
-          fi
-
-        done > sorted_crams.list
+        done \
+          | cut -f 2- \
+          | sort -k 1,1V > sorted_crams.list
 
         ~{glimpse_phase}  \
             --bam-list sorted_crams.list \
