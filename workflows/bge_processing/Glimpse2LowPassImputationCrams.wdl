@@ -11,6 +11,7 @@ workflow Glimpse2LowPassImputationCrams {
         # TAB-separated (one sample per line): col1 cram, col2 crai, col3 sample name (optional).
         # When col3 is present (non-empty), it is written as column 2 of GLIMPSE2_phase --bam-list.
         # Optional header line; set manifest_has_header accordingly.
+
         File sample_manifest
 
         File reference_chunks
@@ -29,23 +30,28 @@ workflow Glimpse2LowPassImputationCrams {
         # chunk, then one ligate per batch (output_basename.batch0.imputed.bcf, ...).
         # 0 or negative = no sample batching: single ligate uses output_basename.imputed.bcf
         # and is exposed as merged_imputed_bcf (not batch_imputed_bcf).
+
         Int max_files_per_ligate = 0
 
         # If true, merge per-batch BCFs into one with bcftools merge (after all batches).
+
         Boolean merge_batch_outputs = false
 
         # Extra attempts after failure (preemptible, etc.). On Terra (Google backend), pair with
         # workflow options JSON memory_retry_multiplier (see Glimpse2LowPassImputationCrams.workflow_options.json)
         # so stderr OOM patterns trigger a retry with multiplied memory.
-        Int phase_max_retries = 3
+
+        Int phase_max_retries = 1
         Int ligate_max_retries = 2
-        Int merge_batch_max_retries = 2
+        Int merge_batch_max_retries = 1
 
     }
 
     Int header_offset = if manifest_has_header then 1 else 0
+
     # Must match BatchCramFiles indexing (read_tsv rows). read_lines(sample_manifest) can disagree
     # (e.g. blank lines) and made only the last batch line up — batch0/1 then fail, last batch succeeds.
+
     Array[Array[String]] manifest_rows = read_tsv(sample_manifest)
     Int manifest_nrows = length(manifest_rows)
     Int total_crams = manifest_nrows - header_offset
@@ -146,10 +152,15 @@ task MergeBatchBcfs {
 
         mkdir -p merge_staging
         merge_paths=merge.bcf.paths
+
         : > "${merge_paths}"
+
         # Pair paths without process substitution (sh-safe): paste to a file, then read in this shell.
+
         paste "${bcf_list}" "${csi_list}" > bcf_csi.pairs
+
         i=0
+
         while IFS="$(printf '\t')" read -r bcf csi || [ -n "${bcf}" ]; do
             bcf=$(printf '%s' "${bcf}" | tr -d '\r')
             csi=$(printf '%s' "${csi}" | tr -d '\r')
@@ -162,15 +173,22 @@ task MergeBatchBcfs {
         done < bcf_csi.pairs
 
         test -s "${merge_paths}" || { echo "ERROR: no batch BCFs to merge" >&2; exit 1; }
+
         bcftools merge -l "${merge_paths}" -Ob -o merged_raw.bcf
+
         bcftools sort merged_raw.bcf -Ou \
             | bcftools annotate --set-id '%CHROM:%POS:%REF:%ALT' -Ou \
             | bcftools norm -d both -Ob -o merged_cleaned.bcf
+
         bcftools view -h --no-version merged_cleaned.bcf > old_header.vcf
+
         java -jar /picard.jar UpdateVcfSequenceDictionary \
             -I old_header.vcf \
-            --SD ~{ref_fasta_dict} -O new_header.vcf
+            --SD ~{ref_fasta_dict} \
+            -O new_header.vcf
+
         bcftools reheader -h new_header.vcf -o ~{output_basename}.imputed.bcf merged_cleaned.bcf
+
         bcftools index -f ~{output_basename}.imputed.bcf
 
     >>>
@@ -224,7 +242,9 @@ task GlimpseLigate {
 
     # Keep ligate input order genomic (not call/shard order), otherwise GLIMPSE2 can fail with:
     # "Overlap is empty".
+
     : > "${chunks_meta}"
+
     while IFS= read -r bcf; do
         [ -n "${bcf}" ] || continue
         echo "INFO: scan chunk ${bcf}"
@@ -243,6 +263,7 @@ task GlimpseLigate {
     cat "${chunks_sorted_list}"
 
     # GLIMPSE2_ligate writes BCF (same as phase inputs); do not use a .vcf.gz name or bcftools mis-detects format.
+
     ~{glimpse_ligate}  \
         --input "${chunks_sorted_list}" \
         --output ligated.bcf
@@ -319,41 +340,43 @@ task GlimpsePhase {
 
         mkdir -p staged_crams
         
-        while IFS= read -r cram_path || [ -n "${cram_path}" ]; do
-          [ -n "${cram_path}" ] || continue
-          cram_path=$(printf '%s' "${cram_path}" | tr -d '\r')
+        while read -r cram_path; do
           ln -sf "${cram_path}" "staged_crams/$(basename "${cram_path}")"
         done < "${cram_list}"
 
-        while IFS= read -r crai_path || [ -n "${crai_path}" ]; do
-          [ -n "${crai_path}" ] || continue
-          crai_path=$(printf '%s' "${crai_path}" | tr -d '\r')
+        while read -r crai_path; do
           ln -sf "${crai_path}" "staged_crams/$(basename "${crai_path}")"
         done < "${crai_list}"
 
         # Pair cram paths with optional sample IDs, sort by staged CRAM basename (same as sort -V on paths).
-        : > bam_list.unsorted.tsv
-        paste "${cram_list}" "${sample_list}" | while IFS="$(printf '\t')" read -r cram_path sample || [ -n "${cram_path}" ]; do
+
+        paste "${cram_list}" "${sample_list}" \
+          | while IFS="$(printf '\t')" read -r cram_path sample || [ -n "${cram_path}" ]; do
           [ -n "${cram_path}" ] || continue
-          cram_path=$(printf '%s' "${cram_path}" | tr -d '\r')
-          sample=$(printf '%s' "${sample:-}" | tr -d '\r')
-          sample=$(printf '%s' "${sample}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
           staged="${PWD}/staged_crams/$(basename "${cram_path}")"
           base="$(basename "${cram_path}")"
-          if [ -n "${sample}" ]; then
-            printf '%s\t%s\t%s\n' "${base}" "${staged}" "${sample}" >> bam_list.unsorted.tsv
-          else
-            printf '%s\t%s\n' "${base}" "${staged}" >> bam_list.unsorted.tsv
-          fi
-        done
 
-        sort -t "$(printf '\t')" -k1,1V bam_list.unsorted.tsv | while IFS="$(printf '\t')" read -r _ staged sample_rest || [ -n "${staged}" ]; do
-          [ -n "${staged}" ] || continue
+          if [ -n "${sample}" ]; then
+            printf '%s\t%s\t%s\n' "${base}" "${staged}" "${sample}"
+          else
+            printf '%s\t%s\n' "${base}" "${staged}"
+          fi
+        done > bam_list.unsorted.tsv
+
+        sort -t "$(printf '\t')" -k1,1V bam_list.unsorted.tsv \
+          | while IFS="$(printf '\t')" read -r _ staged sample_rest || [ -n "${staged}" ]; do
+
+          if [ -z "${staged}" ]; then
+            continue
+          fi
+
           if [ -n "${sample_rest}" ]; then
             printf '%s\t%s\n' "${staged}" "${sample_rest}"
           else
             printf '%s\n' "${staged}"
           fi
+
         done > sorted_crams.list
 
         ~{glimpse_phase}  \
