@@ -352,7 +352,11 @@ task GlimpsePhase {
 
         paste "${cram_list}" "${sample_list}" \
           | while IFS="$(printf '\t')" read -r cram_path sample || [ -n "${cram_path}" ]; do
-          [ -n "${cram_path}" ] || continue
+          
+          # If cram_path is empty, skip the line
+          if [ -z "${cram_path}" ]; then
+            continue
+          fi
 
           staged="${PWD}/staged_crams/$(basename "${cram_path}")"
           base="$(basename "${cram_path}")"
@@ -362,11 +366,13 @@ task GlimpsePhase {
           else
             printf '%s\t%s\n' "${base}" "${staged}"
           fi
+
         done > bam_list.unsorted.tsv
 
         sort -t "$(printf '\t')" -k1,1V bam_list.unsorted.tsv \
           | while IFS="$(printf '\t')" read -r _ staged sample_rest || [ -n "${staged}" ]; do
 
+          # If staged is empty, skip the line
           if [ -z "${staged}" ]; then
             continue
           fi
