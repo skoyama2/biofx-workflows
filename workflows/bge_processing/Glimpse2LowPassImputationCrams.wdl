@@ -177,7 +177,8 @@ task MergeBatchBcfs {
         bcftools merge -l "${merge_paths}" -Ob -o merged_raw.bcf
 
         bcftools sort merged_raw.bcf -Ou \
-            | bcftools annotate --set-id '%CHROM:%POS:%REF:%ALT' -Ob -o merged_cleaned.bcf
+            | bcftools annotate --set-id '%CHROM:%POS:%REF:%ALT' -Ou \
+            | bcftools norm -d both -Ob -o merged_cleaned.bcf
 
         bcftools view -h --no-version merged_cleaned.bcf > old_header.vcf
 
