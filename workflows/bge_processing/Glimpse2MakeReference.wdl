@@ -65,6 +65,7 @@ task BuildOneChromosomeReference {
   String vcf_filename = basename(reference_bcf)
   String vcf_csi_filename = basename(reference_csi)
   String vcf_stem = sub(vcf_filename, "\\.bcf$", "")
+  String reference_with_ids = vcf_stem + ".variant_ids.bcf"
 
   command <<<
     set -euo pipefail
@@ -74,8 +75,16 @@ task BuildOneChromosomeReference {
     ln -s "~{reference_bcf}" "phased_reference/~{vcf_filename}"
     ln -s "~{reference_csi}" "phased_reference/~{vcf_csi_filename}"
 
+    bcftools annotate \
+      --set-id '%CHROM:%POS:%REF:%ALT' \
+      -Ob \
+      -o "phased_reference/~{reference_with_ids}" \
+      "phased_reference/~{vcf_filename}"
+
+    bcftools index -f "phased_reference/~{reference_with_ids}"
+
     ~{glimpse_chunk} \
-      --input "phased_reference/~{vcf_filename}" \
+      --input "phased_reference/~{reference_with_ids}" \
       --map "~{map_file}" \
       --sequential \
       --region "~{chunk_region}" \
@@ -87,7 +96,7 @@ task BuildOneChromosomeReference {
     cut -f 2,3,4 "binary_reference_panel/~{vcf_stem}.chunk.txt" \
       | while read input_chr buf imp; do
         ~{glimpse_split_reference} \
-          --reference "phased_reference/~{vcf_filename}" \
+          --reference "phased_reference/~{reference_with_ids}" \
           --map "~{map_file}" \
           --input-region "${buf}" \
           --output-region "${imp}" \
